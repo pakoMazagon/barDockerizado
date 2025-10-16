@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  my_postgres_choco:
+    image: postgres:15
+    container_name: my_postgres_choco
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: auth
+      POSTGRES_USER: userDB
+      POSTGRES_PASSWORD: passwordDB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - auth-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "userDB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  auth-server:    
+    depends_on:
+      - my_postgres_choco
+    build:
+      context: ./auth
+    env_file:
+    - .env
+    networks:
+      - auth-net
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  resource-server:
+    depends_on:
+      - my_postgres_choco
+      - auth-server
+    build:
+      context: ./resource-server
+    env_file:
+    - .env
+    networks:
+      - auth-net
+    ports:
+      - "9001:9001"
+    restart: on-failure
+  
+  frontend:
+    build: ./oauth2-client-react
+    depends_on:
+      - resource-server
+    ports:
+      - "5173:5173"
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+volumes:
+  postgres_data:
+
+networks:
+  auth-net:
+    name: auth-net
